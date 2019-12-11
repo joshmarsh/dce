@@ -16,8 +16,8 @@ import (
 // Account - Data Layer Struct
 type Account struct {
 	AwsDynamoDB    dynamodbiface.DynamoDBAPI
-	TableName      string
-	ConsistentRead bool
+	TableName      string `env:"ACCOUNT_DB"`
+	ConsistentRead bool   `env:"USE_CONSISTENT_READS" envDefault:"false"`
 }
 
 // Update the Account record in DynamoDB
@@ -30,7 +30,7 @@ func (a *Account) Update(account *model.Account, lastModifiedOn *int64) error {
 	if lastModifiedOn != nil {
 		modExpr := expression.Name("LastModifiedOn").Equal(expression.Value(lastModifiedOn))
 		expr, err = expression.NewBuilder().WithCondition(modExpr).Build()
-		returnValue = "ALL_NEW"
+		returnValue = "NONE"
 	} else {
 		modExpr := expression.Name("LastModifiedOn").AttributeNotExists()
 		expr, err = expression.NewBuilder().WithCondition(modExpr).Build()
@@ -38,30 +38,31 @@ func (a *Account) Update(account *model.Account, lastModifiedOn *int64) error {
 	}
 
 	putMap, _ := dynamodbattribute.Marshal(account)
-
-	res, err := a.AwsDynamoDB.PutItem(
+	fmt.Printf("%+v\n", putMap)
+	_, err = a.AwsDynamoDB.PutItem(
 		&dynamodb.PutItemInput{
 			// Query in Lease Table
 			TableName: aws.String(a.TableName),
 			// Find Account for the requested accountId
 			Item: putMap.M,
 			// Condition Expression
-			ConditionExpression:      expr.Condition(),
-			ExpressionAttributeNames: expr.Names(),
+			ConditionExpression:       expr.Condition(),
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
 			// Return the updated record
 			ReturnValues: aws.String(returnValue),
 		},
 	)
 
 	if err != nil {
-		return fmt.Errorf("update failed for account %s: %s: %w", account.ID, err, errors.ErrInternalServer)
+		return fmt.Errorf("update failed for account %s: %s: %w", *account.ID, err, errors.ErrInternalServer)
 	}
 
-	return dynamodbattribute.UnmarshalMap(res.Attributes, &account)
+	return nil
 }
 
 // Delete the Account record in DynamoDB
-func (a *Account) Delete(accountID string, account *model.Account) error {
+func (a *Account) Delete(account *model.Account) error {
 
 	res, err := a.AwsDynamoDB.DeleteItem(
 		&dynamodb.DeleteItemInput{
@@ -71,7 +72,7 @@ func (a *Account) Delete(accountID string, account *model.Account) error {
 			ReturnValues: aws.String("ALL_NEW"),
 			Key: map[string]*dynamodb.AttributeValue{
 				"Id": {
-					S: aws.String(accountID),
+					S: aws.String(*account.ID),
 				},
 			},
 		},

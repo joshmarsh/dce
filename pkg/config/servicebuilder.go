@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 	"runtime"
@@ -22,9 +23,11 @@ import (
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
 
+	"github.com/Optum/dce/pkg/accountmanager"
+	"github.com/Optum/dce/pkg/common"
+	"github.com/Optum/dce/pkg/data"
 	"github.com/Optum/dce/pkg/db"
 	"github.com/Optum/dce/pkg/rolemanager"
-	"github.com/Optum/dce/pkg/common"
 )
 
 // AWSSessionKey is the key for the configuration for the AWS session
@@ -100,6 +103,18 @@ func (bldr *ServiceBuilder) WithDAO() *ServiceBuilder {
 // WithStorageService tells the builder to add the DCE DAO (DBer) service to the `ConfigurationBuilder`
 func (bldr *ServiceBuilder) WithStorageService() *ServiceBuilder {
 	bldr.handlers = append(bldr.handlers, bldr.createStorageService)
+	return bldr
+}
+
+// WithDataService tells the builder to add the Data service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithDataService() *ServiceBuilder {
+	bldr.handlers = append(bldr.handlers, bldr.createDataService)
+	return bldr
+}
+
+// WithAccountManager tells the builder to add Account Manager service to the `ConfigurationBuilder`
+func (bldr *ServiceBuilder) WithAccountManager() *ServiceBuilder {
+	bldr.handlers = append(bldr.handlers, bldr.createAccountManager)
 	return bldr
 }
 
@@ -220,7 +235,7 @@ func (bldr *ServiceBuilder) createDAO(config *ConfigurationBuilder) error {
 
 	daoSvcImpl := db.DB{}
 
-	err = bldr.Config.Unmarshal(daoSvcImpl)
+	err = bldr.Config.Unmarshal(&daoSvcImpl)
 
 	if err != nil {
 		log.Printf("Error while trying to create DB from env: %s", err.Error())
@@ -239,5 +254,39 @@ func (bldr *ServiceBuilder) createStorageService(config *ConfigurationBuilder) e
 	var storageService common.Storager
 	storageService = &common.S3{}
 	config.WithService(storageService)
+	return nil
+}
+
+func (bldr *ServiceBuilder) createDataService(config *ConfigurationBuilder) error {
+	var dynamodbSvc dynamodbiface.DynamoDBAPI
+	err := bldr.Config.GetService(&dynamodbSvc)
+
+	if err != nil {
+		return err
+	}
+
+	dataSvcImpl := &data.Account{}
+
+	err = bldr.Config.Unmarshal(dataSvcImpl)
+	if err != nil {
+		return err
+	}
+
+	dataSvcImpl.AwsDynamoDB = dynamodbSvc
+	fmt.Printf("Data Service created: %+v\n", dataSvcImpl)
+	config.WithService(dataSvcImpl)
+	return nil
+}
+
+func (bldr *ServiceBuilder) createAccountManager(config *ConfigurationBuilder) error {
+
+	amSvcImpl := &accountmanager.AccountManager{}
+
+	err := bldr.Config.Unmarshal(amSvcImpl)
+	if err != nil {
+		return err
+	}
+
+	config.WithService(amSvcImpl)
 	return nil
 }
