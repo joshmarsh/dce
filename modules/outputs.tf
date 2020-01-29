@@ -22,6 +22,22 @@ output "usage_table_arn" {
   value = aws_dynamodb_table.usage.arn
 }
 
+output "metrics_table_name" {
+  value = aws_dynamodb_table.metrics.name
+}
+
+output "metrics_table_arn" {
+  value = aws_dynamodb_table.metrics.arn
+}
+
+output "sqs_account_pool_metrics_queue_url" {
+  value = aws_sqs_queue.account_reset.id
+}
+
+output "sqs_account_pool_metrics_queue_arn" {
+  value = aws_sqs_queue.account_reset.arn
+}
+
 output "sqs_reset_queue_url" {
   value = aws_sqs_queue.account_reset.id
 }
@@ -44,6 +60,10 @@ output "namespace" {
 
 output "aws_region" {
   value = var.aws_region
+}
+
+output "accounts_topic_id" {
+  value = aws_sns_topic.accounts.id
 }
 
 output "lease_added_topic_id" {
