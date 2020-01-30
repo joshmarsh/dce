@@ -101,7 +101,7 @@ func TestUpdateLeaseStatusLambda(t *testing.T) {
 		"arn:aws:iam::aws:policy/IAMFullAccess",
 		*cePolicy.Arn,
 	}
-	adminRoleRes := createAdminRole(t, awsSession, adminRoleName, policies)
+	adminRoleRes := testutil.CreateAssumableRole(t, awsSession, adminRoleName, policies)
 
 	defer deletePolicy(t, *cePolicy.Arn)
 	defer deleteAdminRole(t, adminRoleName, policies)
@@ -116,20 +116,20 @@ func TestUpdateLeaseStatusLambda(t *testing.T) {
 		defer truncateDBTables(t, dbSvc)
 		defer truncateUsageTable(t, usageSvc)
 
-		accountID := adminRoleRes.accountID
-		adminRoleArn := adminRoleRes.adminRoleArn
+		accountID := adminRoleRes.AccountID
+		adminRoleArn := adminRoleRes.AdminRoleArn
 		principalID := "user"
 
 		// Add current account to the account pool
-		apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/accounts",
-			json: createAccountRequest{
+		testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/accounts",
+			JSON: createAccountRequest{
 				ID:           accountID,
 				AdminRoleArn: adminRoleArn,
 			},
-			maxAttempts: 15,
-			f: func(r *testutil.R, apiResp *apiResponse) {
+			MaxAttempts: 15,
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 201, apiResp.StatusCode)
 			},
 		})
@@ -142,15 +142,15 @@ func TestUpdateLeaseStatusLambda(t *testing.T) {
 		require.Nil(t, err)
 
 		// Create a lease for above created account
-		apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/leases",
-			json: inputLeaseRequest{
+		testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/leases",
+			JSON: inputLeaseRequest{
 				PrincipalID:  principalID,
 				BudgetAmount: 200.00,
 			},
-			maxAttempts: 15,
-			f: func(r *testutil.R, apiResp *apiResponse) {
+			MaxAttempts: 15,
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 201, apiResp.StatusCode)
 			},
 		})
@@ -191,20 +191,20 @@ func TestUpdateLeaseStatusLambda(t *testing.T) {
 		defer truncateDBTables(t, dbSvc)
 		defer truncateUsageTable(t, usageSvc)
 
-		accountID := adminRoleRes.accountID
-		adminRoleArn := adminRoleRes.adminRoleArn
+		accountID := adminRoleRes.AccountID
+		adminRoleArn := adminRoleRes.AdminRoleArn
 		principalID := "user"
 
 		// Add current account to the account pool
-		apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/accounts",
-			json: createAccountRequest{
+		testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/accounts",
+			JSON: createAccountRequest{
 				ID:           accountID,
 				AdminRoleArn: adminRoleArn,
 			},
-			maxAttempts: 15,
-			f: func(r *testutil.R, apiResp *apiResponse) {
+			MaxAttempts: 15,
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 201, apiResp.StatusCode)
 			},
 		})
@@ -217,15 +217,15 @@ func TestUpdateLeaseStatusLambda(t *testing.T) {
 		require.Nil(t, err)
 
 		// Create a lease for above created account
-		apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/leases",
-			json: inputLeaseRequest{
+		testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/leases",
+			JSON: inputLeaseRequest{
 				PrincipalID:  principalID,
 				BudgetAmount: 200.00,
 			},
-			maxAttempts: 15,
-			f: func(r *testutil.R, apiResp *apiResponse) {
+			MaxAttempts: 15,
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 201, apiResp.StatusCode)
 			},
 		})
@@ -266,20 +266,20 @@ func TestUpdateLeaseStatusLambda(t *testing.T) {
 		defer truncateDBTables(t, dbSvc)
 		defer truncateUsageTable(t, usageSvc)
 
-		accountID := adminRoleRes.accountID
-		adminRoleArn := adminRoleRes.adminRoleArn
+		accountID := adminRoleRes.AccountID
+		adminRoleArn := adminRoleRes.AdminRoleArn
 		principalID := "user"
 
 		// Add current account to the account pool
-		apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/accounts",
-			json: createAccountRequest{
+		testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/accounts",
+			JSON: createAccountRequest{
 				ID:           accountID,
 				AdminRoleArn: adminRoleArn,
 			},
-			maxAttempts: 15,
-			f: func(r *testutil.R, apiResp *apiResponse) {
+			MaxAttempts: 15,
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 201, apiResp.StatusCode)
 			},
 		})
@@ -292,15 +292,15 @@ func TestUpdateLeaseStatusLambda(t *testing.T) {
 		require.Nil(t, err)
 
 		// Create a lease for above created account
-		apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/leases",
-			json: inputLeaseRequest{
+		testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/leases",
+			JSON: inputLeaseRequest{
 				PrincipalID:  principalID,
 				BudgetAmount: 199.00,
 			},
-			maxAttempts: 15,
-			f: func(r *testutil.R, apiResp *apiResponse) {
+			MaxAttempts: 15,
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 201, apiResp.StatusCode)
 			},
 		})
@@ -344,20 +344,20 @@ func TestUpdateLeaseStatusLambda(t *testing.T) {
 		defer truncateDBTables(t, dbSvc)
 		defer truncateUsageTable(t, usageSvc)
 
-		accountID := adminRoleRes.accountID
-		adminRoleArn := adminRoleRes.adminRoleArn
+		accountID := adminRoleRes.AccountID
+		adminRoleArn := adminRoleRes.AdminRoleArn
 		principalID := "user"
 
 		// Add current account to the account pool
-		apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/accounts",
-			json: createAccountRequest{
+		testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/accounts",
+			JSON: createAccountRequest{
 				ID:           accountID,
 				AdminRoleArn: adminRoleArn,
 			},
-			maxAttempts: 15,
-			f: func(r *testutil.R, apiResp *apiResponse) {
+			MaxAttempts: 15,
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 201, apiResp.StatusCode)
 			},
 		})
@@ -370,15 +370,15 @@ func TestUpdateLeaseStatusLambda(t *testing.T) {
 		require.Nil(t, err)
 
 		// Create a lease for above created account
-		apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/leases",
-			json: inputLeaseRequest{
+		testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/leases",
+			JSON: inputLeaseRequest{
 				PrincipalID:  principalID,
 				BudgetAmount: 300.00,
 			},
-			maxAttempts: 15,
-			f: func(r *testutil.R, apiResp *apiResponse) {
+			MaxAttempts: 15,
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 201, apiResp.StatusCode)
 			},
 		})
@@ -422,20 +422,20 @@ func TestUpdateLeaseStatusLambda(t *testing.T) {
 		defer truncateDBTables(t, dbSvc)
 		defer truncateUsageTable(t, usageSvc)
 
-		accountID := adminRoleRes.accountID
-		adminRoleArn := adminRoleRes.adminRoleArn
+		accountID := adminRoleRes.AccountID
+		adminRoleArn := adminRoleRes.AdminRoleArn
 		principalID := "user"
 
 		// Add current account to the account pool
-		apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/accounts",
-			json: createAccountRequest{
+		testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/accounts",
+			JSON: createAccountRequest{
 				ID:           accountID,
 				AdminRoleArn: adminRoleArn,
 			},
-			maxAttempts: 15,
-			f: func(r *testutil.R, apiResp *apiResponse) {
+			MaxAttempts: 15,
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 201, apiResp.StatusCode)
 			},
 		})
@@ -448,15 +448,15 @@ func TestUpdateLeaseStatusLambda(t *testing.T) {
 		require.Nil(t, err)
 
 		// Create a lease for above created account
-		apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/leases",
-			json: inputLeaseRequest{
+		testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/leases",
+			JSON: inputLeaseRequest{
 				PrincipalID:  principalID,
 				BudgetAmount: 300.00,
 			},
-			maxAttempts: 15,
-			f: func(r *testutil.R, apiResp *apiResponse) {
+			MaxAttempts: 15,
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 201, apiResp.StatusCode)
 			},
 		})
@@ -538,10 +538,10 @@ func createUsageForInputAmount(t *testing.T, apiURL string, accountID string, us
 
 	testutil.Retry(t, 10, 10*time.Millisecond, func(r *testutil.R) {
 
-		resp := apiRequest(t, &apiRequestInput{
-			method: "GET",
-			url:    apiURL + queryString,
-			json:   nil,
+		resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "GET",
+			URL:    apiURL + queryString,
+			JSON:   nil,
 		})
 
 		// Verify response code

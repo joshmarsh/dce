@@ -1,10 +1,8 @@
 package tests
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"net/http"
 	"net/url"
@@ -25,7 +23,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
-	sigv4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/aws/aws-sdk-go/service/iam"
 	aws2 "github.com/gruntwork-io/terratest/modules/aws"
 	"github.com/gruntwork-io/terratest/modules/terraform"
@@ -93,9 +90,9 @@ func TestApi(t *testing.T) {
 		"arn:aws:iam::aws:policy/IAMFullAccess",
 		*cePolicy.Arn,
 	}
-	adminRoleRes := createAdminRole(t, awsSession, adminRoleName, policies)
-	accountID := adminRoleRes.accountID
-	adminRoleArn := adminRoleRes.adminRoleArn
+	adminRoleRes := testutil.CreateAssumableRole(t, awsSession, adminRoleName, policies)
+	accountID := adminRoleRes.AccountID
+	adminRoleArn := adminRoleRes.AdminRoleArn
 
 	// Cleanup tables before and after tests
 	truncateAccountTable(t, dbSvc)
@@ -130,10 +127,10 @@ func TestApi(t *testing.T) {
 
 		t.Run("should allow IAM authenticated requests", func(t *testing.T) {
 			// Send an API request
-			apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases",
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases",
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Defaults to returning 200
 					assert.Equal(r, http.StatusOK, apiResp.StatusCode)
 				},
@@ -210,13 +207,13 @@ func TestApi(t *testing.T) {
 			roleCreds := NewCredentials(t, awsSession, *roleRes.Role.Arn)
 
 			// Attempt to hit the API with using our assumed role
-			apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases",
-				creds:  roleCreds,
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases",
+				Creds:  roleCreds,
 				// This can take a while to propagate
-				maxAttempts: 30,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+				MaxAttempts: 30,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Defaults to not being unauthorized
 					assert.NotEqual(r, http.StatusForbidden, apiResp.StatusCode,
 						"Should not return an IAM authorization error")
@@ -298,11 +295,11 @@ func TestApi(t *testing.T) {
 			roleCreds := NewCredentials(t, awsSession, *roleRes.Role.Arn)
 
 			// Attempt to hit the API with using our assumed role
-			apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases",
-				creds:  roleCreds,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases",
+				Creds:  roleCreds,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Defaults to not being unauthorized
 					assert.NotEqual(r, http.StatusForbidden, apiResp.StatusCode,
 						"Should not return an IAM authorization error")
@@ -316,11 +313,11 @@ func TestApi(t *testing.T) {
 			roleCreds := NewCredentials(t, awsSession, *roleRes.Role.Arn)
 
 			// Attempt to hit the API with using our assumed role
-			apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/accounts",
-				creds:  roleCreds,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/accounts",
+				Creds:  roleCreds,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Defaults to not being unauthorized
 					assert.Equal(r, http.StatusForbidden, apiResp.StatusCode,
 						"Should return an IAM authorization error")
@@ -335,11 +332,11 @@ func TestApi(t *testing.T) {
 			roleCreds := NewCredentials(t, awsSession, *roleRes.Role.Arn)
 
 			// Attempt to hit the API with using our assumed role
-			apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/usage",
-				creds:  roleCreds,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/usage",
+				Creds:  roleCreds,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Defaults to not being unauthorized
 					assert.NotEqual(r, http.StatusForbidden, apiResp.StatusCode,
 						"Should not return an IAM authorization error")
@@ -372,17 +369,17 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			resp := apiRequest(t, &apiRequestInput{
-				method: "POST",
-				url:    apiURL + "/leases",
-				json:   body,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "POST",
+				URL:    apiURL + "/leases",
+				JSON:   body,
 			})
 
 			// Verify response code
 			require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 			// Parse response json
-			data := parseResponseJSON(t, resp)
+			data := testutil.ParseResponseJSON(t, resp)
 
 			// Verify provisioned response json
 			require.Equal(t, principalID, data["principalId"].(string))
@@ -400,18 +397,18 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			resp = apiRequest(t, &apiRequestInput{
-				method: "DELETE",
-				url:    apiURL + "/leases",
-				json:   body,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			resp = testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "DELETE",
+				URL:    apiURL + "/leases",
+				JSON:   body,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Verify response code
 					assert.Equal(r, http.StatusOK, apiResp.StatusCode)
 				},
 			})
 
 			// Parse response json
-			data = parseResponseJSON(t, resp)
+			data = testutil.ParseResponseJSON(t, resp)
 
 			// Verify provisioned response json
 			assert.Equal(t, principalID, data["principalId"].(string))
@@ -445,17 +442,17 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			resp := apiRequest(t, &apiRequestInput{
-				method: "POST",
-				url:    apiURL + "/leases",
-				json:   body,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "POST",
+				URL:    apiURL + "/leases",
+				JSON:   body,
 			})
 
 			// Verify response code
 			require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 			// Parse response json
-			data := parseResponseJSON(t, resp)
+			data := testutil.ParseResponseJSON(t, resp)
 
 			// Verify provisioned response json
 			require.Equal(t, principalID, data["principalId"].(string))
@@ -467,17 +464,17 @@ func TestApi(t *testing.T) {
 			require.NotNil(t, data["leaseStatusModifiedOn"])
 
 			// Send an API request
-			resp = apiRequest(t, &apiRequestInput{
-				method: "DELETE",
-				url:    apiURL + fmt.Sprintf("/leases/%s", data["id"]),
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			resp = testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "DELETE",
+				URL:    apiURL + fmt.Sprintf("/leases/%s", data["id"]),
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Verify response code
 					assert.Equal(r, http.StatusOK, apiResp.StatusCode)
 				},
 			})
 
 			// Parse response json
-			data = parseResponseJSON(t, resp)
+			data = testutil.ParseResponseJSON(t, resp)
 
 			// Verify provisioned response json
 			assert.Equal(t, principalID, data["principalId"].(string))
@@ -492,15 +489,15 @@ func TestApi(t *testing.T) {
 
 		t.Run("Should not be able to create lease with empty json", func(t *testing.T) {
 			// Send an API request
-			apiRequest(t, &apiRequestInput{
-				method: "POST",
-				url:    apiURL + "/leases",
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "POST",
+				URL:    apiURL + "/leases",
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Verify response code
 					assert.Equal(r, http.StatusBadRequest, apiResp.StatusCode)
 
 					// Parse response json
-					data := parseResponseJSON(t, apiResp)
+					data := testutil.ParseResponseJSON(t, apiResp)
 
 					// Verify error response json
 					// Get nested json in response json
@@ -521,16 +518,16 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			apiRequest(t, &apiRequestInput{
-				method: "POST",
-				url:    apiURL + "/leases",
-				json:   body,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "POST",
+				URL:    apiURL + "/leases",
+				JSON:   body,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Verify response code
 					assert.Equal(r, http.StatusServiceUnavailable, apiResp.StatusCode)
 
 					// Parse response json
-					data := parseResponseJSON(t, apiResp)
+					data := testutil.ParseResponseJSON(t, apiResp)
 
 					// Verify error response json
 					// Get nested json in response json
@@ -576,16 +573,16 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			apiRequest(t, &apiRequestInput{
-				method: "POST",
-				url:    apiURL + "/leases",
-				json:   body,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "POST",
+				URL:    apiURL + "/leases",
+				JSON:   body,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Verify response code
 					assert.Equal(r, http.StatusConflict, apiResp.StatusCode)
 
 					// Parse response json
-					data := parseResponseJSON(t, apiResp)
+					data := testutil.ParseResponseJSON(t, apiResp)
 
 					// Verify error response json
 					// Get nested json in response json
@@ -600,15 +597,15 @@ func TestApi(t *testing.T) {
 
 		t.Run("Should not be able to destroy lease with empty json", func(t *testing.T) {
 			// Send an API request
-			apiRequest(t, &apiRequestInput{
-				method: "DELETE",
-				url:    apiURL + "/leases",
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "DELETE",
+				URL:    apiURL + "/leases",
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Verify response code
 					assert.Equal(r, http.StatusBadRequest, apiResp.StatusCode)
 
 					// Parse response json
-					data := parseResponseJSON(t, apiResp)
+					data := testutil.ParseResponseJSON(t, apiResp)
 
 					// Verify error response json
 					// Get nested json in response json
@@ -631,16 +628,16 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			apiRequest(t, &apiRequestInput{
-				method: "DELETE",
-				url:    apiURL + "/leases",
-				json:   body,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "DELETE",
+				URL:    apiURL + "/leases",
+				JSON:   body,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Verify response code
 					assert.Equal(r, http.StatusBadRequest, apiResp.StatusCode)
 
 					// Parse response json
-					data := parseResponseJSON(t, apiResp)
+					data := testutil.ParseResponseJSON(t, apiResp)
 
 					// Verify error response json
 					// Get nested json in response json
@@ -685,16 +682,16 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			apiRequest(t, &apiRequestInput{
-				method: "DELETE",
-				url:    apiURL + "/leases",
-				json:   body,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "DELETE",
+				URL:    apiURL + "/leases",
+				JSON:   body,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Verify response code
 					assert.Equal(r, http.StatusBadRequest, apiResp.StatusCode)
 
 					// Parse response json
-					data := parseResponseJSON(t, apiResp)
+					data := testutil.ParseResponseJSON(t, apiResp)
 
 					// Verify error response json
 					// Get nested json in response json
@@ -738,16 +735,16 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			apiRequest(t, &apiRequestInput{
-				method: "DELETE",
-				url:    apiURL + "/leases",
-				json:   body,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "DELETE",
+				URL:    apiURL + "/leases",
+				JSON:   body,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Verify response code
 					assert.Equal(r, http.StatusBadRequest, apiResp.StatusCode)
 
 					// Parse response json
-					data := parseResponseJSON(t, apiResp)
+					data := testutil.ParseResponseJSON(t, apiResp)
 
 					// Verify error response json
 					// Get nested json in response json
@@ -772,21 +769,23 @@ func TestApi(t *testing.T) {
 		t.Run("STEP: Create Account", func(t *testing.T) {
 
 			// Add the current account to the account pool
-			createAccountRes := apiRequest(t, &apiRequestInput{
-				method: "POST",
-				url:    apiURL + "/accounts",
-				json: createAccountRequest{
+			createAccountRes := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "POST",
+				URL:    apiURL + "/accounts",
+				JSON: createAccountRequest{
 					ID:           accountID,
 					AdminRoleArn: adminRoleArn,
 				},
-				maxAttempts: 15,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+				MaxAttempts: 15,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					assert.Equal(r, 201, apiResp.StatusCode)
 				},
 			})
+			fmt.Println("@@@@adminRoleArn= ", adminRoleArn)
+
 
 			// Check the response
-			postResJSON := parseResponseJSON(t, createAccountRes)
+			postResJSON := testutil.ParseResponseJSON(t, createAccountRes)
 			require.Equal(t, accountID, postResJSON["id"])
 			require.Equal(t, "NotReady", postResJSON["accountStatus"])
 			require.Equal(t, adminRoleArn, postResJSON["adminRoleArn"])
@@ -829,13 +828,13 @@ func TestApi(t *testing.T) {
 
 			t.Run("STEP: Get Account by ID", func(t *testing.T) {
 				// Send GET /accounts/id
-				apiRequest(t, &apiRequestInput{
-					method: "GET",
-					url:    apiURL + "/accounts/" + accountID,
-					f: func(r *testutil.R, apiResp *apiResponse) {
+				testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+					Method: "GET",
+					URL:    apiURL + "/accounts/" + accountID,
+					F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 						// Check the GET /accounts response
 						assert.Equal(r, apiResp.StatusCode, 200)
-						getResJSON := apiResp.json.(map[string]interface{})
+						getResJSON := apiResp.JSON.(map[string]interface{})
 						assert.Equal(r, accountID, getResJSON["id"])
 						assert.Equal(r, "NotReady", getResJSON["accountStatus"])
 						assert.Equal(r, adminRoleArn, getResJSON["adminRoleArn"])
@@ -850,10 +849,10 @@ func TestApi(t *testing.T) {
 
 			t.Run("STEP: List Accounts", func(t *testing.T) {
 				// Send GET /accounts
-				apiRequest(t, &apiRequestInput{
-					method: "GET",
-					url:    apiURL + "/accounts",
-					f: func(r *testutil.R, apiResp *apiResponse) {
+				testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+					Method: "GET",
+					URL:    apiURL + "/accounts",
+					F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 						// Check the response
 						assert.Equal(r, apiResp.StatusCode, 200)
 						listResJSON := parseResponseArrayJSON(t, apiResp)
@@ -880,10 +879,10 @@ func TestApi(t *testing.T) {
 				var budgetNotificationEmails = []string{"test@test.com"}
 
 				// Create a lease
-				res := apiRequest(t, &apiRequestInput{
-					method: "POST",
-					url:    apiURL + "/leases",
-					json: struct {
+				res := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+					Method: "POST",
+					URL:    apiURL + "/leases",
+					JSON: struct {
 						PrincipalID              string   `json:"principalId"`
 						BudgetAmount             float64  `json:"budgetAmount"`
 						BudgetCurrency           string   `json:"budgetCurrency"`
@@ -894,12 +893,12 @@ func TestApi(t *testing.T) {
 						BudgetCurrency:           "USD",
 						BudgetNotificationEmails: budgetNotificationEmails,
 					},
-					f: func(r *testutil.R, apiResp *apiResponse) {
-						assert.Equalf(r, 201, apiResp.StatusCode, "%v", apiResp.json)
+					F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
+						assert.Equalf(r, 201, apiResp.StatusCode, "%v", apiResp.JSON)
 					},
 				})
 
-				resJSON := parseResponseJSON(t, res)
+				resJSON := testutil.ParseResponseJSON(t, res)
 
 				s := make([]interface{}, len(budgetNotificationEmails))
 				for i, v := range budgetNotificationEmails {
@@ -927,15 +926,15 @@ func TestApi(t *testing.T) {
 
 				t.Run("STEP: Delete Account (with Lease)", func(t *testing.T) {
 					// Request a lease
-					apiRequest(t, &apiRequestInput{
-						method: "DELETE",
-						url:    apiURL + "/accounts/" + accountID,
-						json: struct {
+					testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+						Method: "DELETE",
+						URL:    apiURL + "/accounts/" + accountID,
+						JSON: struct {
 							PrincipalID string `json:"principalId"`
 						}{
 							PrincipalID: "test-user",
 						},
-						f: func(r *testutil.R, apiResp *apiResponse) {
+						F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 							assert.Equal(r, 409, apiResp.StatusCode)
 						},
 					})
@@ -944,17 +943,17 @@ func TestApi(t *testing.T) {
 
 				t.Run("STEP: Delete Lease", func(t *testing.T) {
 					// Delete the lease
-					apiRequest(t, &apiRequestInput{
-						method: "DELETE",
-						url:    apiURL + "/leases",
-						json: struct {
+					testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+						Method: "DELETE",
+						URL:    apiURL + "/leases",
+						JSON: struct {
 							PrincipalID string `json:"principalId"`
 							AccountID   string `json:"accountId"`
 						}{
 							PrincipalID: "test-user",
 							AccountID:   accountID,
 						},
-						f: func(r *testutil.R, apiResp *apiResponse) {
+						F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 							assert.Equal(r, 200, apiResp.StatusCode)
 						},
 					})
@@ -977,21 +976,21 @@ func TestApi(t *testing.T) {
 						// We want to make sure that the lease parameters get updated.
 						time.Sleep(1 * time.Second) // Wait a bit, so our timestamps are new
 						expiresOn := time.Now().Unix() + 1000
-						res = apiRequest(t, &apiRequestInput{
-							method: "POST",
-							url:    apiURL + "/leases",
-							json: map[string]interface{}{
+						res = testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+							Method: "POST",
+							URL:    apiURL + "/leases",
+							JSON: map[string]interface{}{
 								"principalId": "test-user",
 								// Change some values here, compared to the previous lease
 								"budgetAmount":   500,
 								"budgetCurrency": "EUR",
 								"expiresOn":      expiresOn,
 							},
-							f: func(r *testutil.R, apiResp *apiResponse) {
+							F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 								assert.Equal(r, 201, apiResp.StatusCode)
 							},
 						})
-						resJSON = parseResponseJSON(t, res)
+						resJSON = testutil.ParseResponseJSON(t, res)
 
 						// Check values in JSON response are updated
 						require.Equal(t, float64(500), resJSON["budgetAmount"])
@@ -1014,14 +1013,14 @@ func TestApi(t *testing.T) {
 						require.True(t, newLease.LeaseStatusModifiedOn > lease.LeaseStatusModifiedOn)
 
 						// Delete the lease (cleanup)
-						apiRequest(t, &apiRequestInput{
-							method: "DELETE",
-							url:    apiURL + "/leases",
-							json: map[string]interface{}{
+						testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+							Method: "DELETE",
+							URL:    apiURL + "/leases",
+							JSON: map[string]interface{}{
 								"principalId": "test-user",
 								"accountId":   accountID,
 							},
-							f: func(r *testutil.R, apiResp *apiResponse) {
+							F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 								assert.Equal(r, 200, apiResp.StatusCode)
 							},
 						})
@@ -1029,19 +1028,19 @@ func TestApi(t *testing.T) {
 
 					t.Run("STEP: Delete Account", func(t *testing.T) {
 						// Delete the account
-						apiRequest(t, &apiRequestInput{
-							method: "DELETE",
-							url:    apiURL + "/accounts/" + accountID,
-							f: func(r *testutil.R, apiResp *apiResponse) {
+						testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+							Method: "DELETE",
+							URL:    apiURL + "/accounts/" + accountID,
+							F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 								assert.Equal(r, 204, apiResp.StatusCode)
 							},
 						})
 
 						// Attempt to get the deleted account (should 404)
-						apiRequest(t, &apiRequestInput{
-							method: "GET",
-							url:    apiURL + "/accounts/" + accountID,
-							f: func(r *testutil.R, apiResp *apiResponse) {
+						testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+							Method: "GET",
+							URL:    apiURL + "/accounts/" + accountID,
+							F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 								assert.Equal(t, 404, apiResp.StatusCode)
 							},
 						})
@@ -1074,10 +1073,10 @@ func TestApi(t *testing.T) {
 		defer truncateDBTables(t, dbSvc)
 
 		// Create an account with metadata
-		res := apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/accounts",
-			json: map[string]interface{}{
+		res := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/accounts",
+			JSON: map[string]interface{}{
 				"id":           accountID,
 				"adminRoleArn": adminRoleArn,
 				"metadata": map[string]interface{}{
@@ -1087,14 +1086,14 @@ func TestApi(t *testing.T) {
 					"hello": "you",
 				},
 			},
-			f: func(r *testutil.R, apiResp *apiResponse) {
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 201, apiResp.StatusCode)
 			},
 		})
 
 		// Check the response
 		require.Equal(t, res.StatusCode, 201)
-		resJSON := parseResponseJSON(t, res)
+		resJSON := testutil.ParseResponseJSON(t, res)
 		require.Equal(t, map[string]interface{}{
 			"foo": map[string]interface{}{
 				"bar": "baz",
@@ -1113,15 +1112,15 @@ func TestApi(t *testing.T) {
 		}, dbAccount.Metadata)
 
 		// Check the GET /accounts API response
-		getRes := apiRequest(t, &apiRequestInput{
-			method: "GET",
-			url:    apiURL + "/accounts/" + accountID,
-			f: func(r *testutil.R, apiResp *apiResponse) {
+		getRes := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "GET",
+			URL:    apiURL + "/accounts/" + accountID,
+			F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 				assert.Equal(r, 200, apiResp.StatusCode)
 			},
 		})
 		require.Equal(t, getRes.StatusCode, 200)
-		getResJSON := parseResponseJSON(t, getRes)
+		getResJSON := testutil.ParseResponseJSON(t, getRes)
 		require.Equal(t, map[string]interface{}{
 			"foo": map[string]interface{}{
 				"bar": "baz",
@@ -1133,10 +1132,10 @@ func TestApi(t *testing.T) {
 	t.Run("Delete Account", func(t *testing.T) {
 
 		t.Run("when the account does not exists", func(t *testing.T) {
-			apiRequest(t, &apiRequestInput{
-				method: "DELETE",
-				url:    apiURL + "/accounts/1234523456",
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "DELETE",
+				URL:    apiURL + "/accounts/1234523456",
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					assert.Equal(r, http.StatusNotFound, apiResp.StatusCode, "it returns a 404")
 				},
 			})
@@ -1150,14 +1149,14 @@ func TestApi(t *testing.T) {
 		defer truncateDBTables(t, dbSvc)
 
 		// Create an account
-		_ = apiRequest(t, &apiRequestInput{
-			method: "POST",
-			url:    apiURL + "/accounts",
-			json: map[string]interface{}{
+		_ = testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "POST",
+			URL:    apiURL + "/accounts",
+			JSON: map[string]interface{}{
 				"id":           accountID,
 				"adminRoleArn": adminRoleArn,
 			},
-			f: statusCodeAssertion(201),
+			F: statusCodeAssertion(201),
 		})
 
 		t.Run("should update an account's metadata", func(t *testing.T) {
@@ -1166,19 +1165,19 @@ func TestApi(t *testing.T) {
 
 			// PUT /accounts/:id
 			// with update to metadata
-			res := apiRequest(t, &apiRequestInput{
-				method: "PUT",
-				url:    apiURL + "/accounts/" + accountID,
-				json: map[string]interface{}{
+			res := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "PUT",
+				URL:    apiURL + "/accounts/" + accountID,
+				JSON: map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"foo": "bar",
 					},
 				},
-				f: statusCodeAssertion(200),
+				F: statusCodeAssertion(200),
 			})
 
 			// Check the JSON response
-			resJSON := parseResponseJSON(t, res)
+			resJSON := testutil.ParseResponseJSON(t, res)
 			require.Equal(t, map[string]interface{}{
 				"foo": "bar",
 			}, resJSON["metadata"], "Response includes updated metadata")
@@ -1199,16 +1198,16 @@ func TestApi(t *testing.T) {
 		t.Run("should fail if the new adminRoleArn is not assumable", func(t *testing.T) {
 			// PUT /accounts/:id
 			// with invalid adminRoleArn
-			res := apiRequest(t, &apiRequestInput{
-				method: "PUT",
-				url:    apiURL + "/accounts/" + accountID,
-				json: map[string]interface{}{
+			res := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "PUT",
+				URL:    apiURL + "/accounts/" + accountID,
+				JSON: map[string]interface{}{
 					"adminRoleArn": adminRoleArn + "not-valid-role",
 				},
-				f: statusCodeAssertion(400),
+				F: statusCodeAssertion(400),
 			})
 
-			resJSON := parseResponseJSON(t, res)
+			resJSON := testutil.ParseResponseJSON(t, res)
 			require.Equal(t, map[string]interface{}{
 				"error": map[string]interface{}{
 					"code":    "RequestValidationError",
@@ -1220,10 +1219,10 @@ func TestApi(t *testing.T) {
 		t.Run("should return a 404 if the account doesn't exist", func(t *testing.T) {
 			// PUT /accounts/:id
 			// with invalid adminRoleArn
-			res := apiRequest(t, &apiRequestInput{
-				method: "PUT",
-				url:    apiURL + "/accounts/123456789012",
-				json: map[string]interface{}{
+			res := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "PUT",
+				URL:    apiURL + "/accounts/123456789012",
+				JSON: map[string]interface{}{
 					"metadata": map[string]interface{}{
 						"foo": "bar",
 					},
@@ -1231,7 +1230,7 @@ func TestApi(t *testing.T) {
 			})
 			require.Equal(t, 404, res.StatusCode)
 
-			resJSON := parseResponseJSON(t, res)
+			resJSON := testutil.ParseResponseJSON(t, res)
 			require.Equal(t, map[string]interface{}{
 				"error": map[string]interface{}{
 					"code":    "NotFoundError",
@@ -1247,18 +1246,18 @@ func TestApi(t *testing.T) {
 		t.Run("Should get an error for invalid date format", func(t *testing.T) {
 
 			// Send an API request
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/usage?startDate=2019-09-2&endDate=2019-09-2",
-				json:   nil,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/usage?startDate=2019-09-2&endDate=2019-09-2",
+				JSON:   nil,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Verify response code
 					assert.Equal(r, http.StatusBadRequest, apiResp.StatusCode)
 				},
 			})
 
 			// Parse response json
-			data := parseResponseJSON(t, resp)
+			data := testutil.ParseResponseJSON(t, resp)
 
 			// Verify error response json
 			// Get nested json in response json
@@ -1271,11 +1270,11 @@ func TestApi(t *testing.T) {
 		t.Run("Should get an empty json for usage not found for given input date range", func(t *testing.T) {
 
 			// Send an API request
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/usage?startDate=1568937600&endDate=1569023999",
-				json:   nil,
-				f: func(r *testutil.R, apiResp *apiResponse) {
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/usage?startDate=1568937600&endDate=1569023999",
+				JSON:   nil,
+				F: func(r *testutil.R, apiResp *testutil.ApiResponse) {
 					// Verify response code
 					assert.Equal(r, http.StatusOK, apiResp.StatusCode)
 				},
@@ -1305,10 +1304,10 @@ func TestApi(t *testing.T) {
 
 				testutil.Retry(t, 10, 10*time.Millisecond, func(r *testutil.R) {
 
-					resp := apiRequest(t, &apiRequestInput{
-						method: "GET",
-						url:    requestURL,
-						json:   nil,
+					resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+						Method: "GET",
+						URL:    requestURL,
+						JSON:   nil,
 					})
 
 					// Verify response code
@@ -1333,10 +1332,10 @@ func TestApi(t *testing.T) {
 
 				testutil.Retry(t, 10, 10*time.Millisecond, func(r *testutil.R) {
 
-					resp := apiRequest(t, &apiRequestInput{
-						method: "GET",
-						url:    requestURL,
-						json:   nil,
+					resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+						Method: "GET",
+						URL:    requestURL,
+						JSON:   nil,
 					})
 
 					// Verify response code
@@ -1361,10 +1360,10 @@ func TestApi(t *testing.T) {
 
 				testutil.Retry(t, 10, 10*time.Millisecond, func(r *testutil.R) {
 
-					resp := apiRequest(t, &apiRequestInput{
-						method: "GET",
-						url:    requestURL,
-						json:   nil,
+					resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+						Method: "GET",
+						URL:    requestURL,
+						JSON:   nil,
 					})
 
 					// Verify response code
@@ -1384,10 +1383,10 @@ func TestApi(t *testing.T) {
 			})
 
 			t.Run("Get usage when there are no query parameters", func(t *testing.T) {
-				resp := apiRequest(t, &apiRequestInput{
-					method: "GET",
-					url:    apiURL + "/usage",
-					json:   nil,
+				resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+					Method: "GET",
+					URL:    apiURL + "/usage",
+					JSON:   nil,
 				})
 
 				results := parseResponseArrayJSON(t, resp)
@@ -1404,10 +1403,10 @@ func TestApi(t *testing.T) {
 			})
 
 			t.Run("Get usage when there is an account ID parameter", func(t *testing.T) {
-				resp := apiRequest(t, &apiRequestInput{
-					method: "GET",
-					url:    apiURL + "/usage?accountId=" + testAccount,
-					json:   nil,
+				resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+					Method: "GET",
+					URL:    apiURL + "/usage?accountId=" + testAccount,
+					JSON:   nil,
 				})
 
 				results := parseResponseArrayJSON(t, resp)
@@ -1415,10 +1414,10 @@ func TestApi(t *testing.T) {
 			})
 
 			t.Run("Get usage when there is an principal ID parameter", func(t *testing.T) {
-				resp := apiRequest(t, &apiRequestInput{
-					method: "GET",
-					url:    apiURL + "/usage?principalId=" + testPrincipalID,
-					json:   nil,
+				resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+					Method: "GET",
+					URL:    apiURL + "/usage?principalId=" + testPrincipalID,
+					JSON:   nil,
 				})
 
 				results := parseResponseArrayJSON(t, resp)
@@ -1426,10 +1425,10 @@ func TestApi(t *testing.T) {
 			})
 
 			t.Run("Get usage when there is a limit parameter", func(t *testing.T) {
-				resp := apiRequest(t, &apiRequestInput{
-					method: "GET",
-					url:    apiURL + "/usage?limit=1",
-					json:   nil,
+				resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+					Method: "GET",
+					URL:    apiURL + "/usage?limit=1",
+					JSON:   nil,
 				})
 
 				results := parseResponseArrayJSON(t, resp)
@@ -1440,10 +1439,10 @@ func TestApi(t *testing.T) {
 				currentDate := time.Now()
 				testStartDate := time.Date(currentDate.Year(), currentDate.Month(), currentDate.Day(), 0, 0, 0, 0, time.UTC)
 				testDate := fmt.Sprint(testStartDate.Unix())
-				resp := apiRequest(t, &apiRequestInput{
-					method: "GET",
-					url:    apiURL + "/usage?startDate=" + testDate,
-					json:   nil,
+				resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+					Method: "GET",
+					URL:    apiURL + "/usage?startDate=" + testDate,
+					JSON:   nil,
 				})
 
 				results := parseResponseArrayJSON(t, resp)
@@ -1453,10 +1452,10 @@ func TestApi(t *testing.T) {
 			t.Run("Get usage when there is a Link header", func(t *testing.T) {
 				nextPageRegex := regexp.MustCompile(`<(.+)>`)
 
-				respOne := apiRequest(t, &apiRequestInput{
-					method: "GET",
-					url:    apiURL + "/usage?limit=2",
-					json:   nil,
+				respOne := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+					Method: "GET",
+					URL:    apiURL + "/usage?limit=2",
+					JSON:   nil,
 				})
 
 				linkHeader, ok := respOne.Header["Link"]
@@ -1470,10 +1469,10 @@ func TestApi(t *testing.T) {
 				_, err := url.ParseRequestURI(nextPage)
 				assert.Nil(t, err, "Link header should contain a valid URL")
 
-				respTwo := apiRequest(t, &apiRequestInput{
-					method: "GET",
-					url:    nextPage,
-					json:   nil,
+				respTwo := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+					Method: "GET",
+					URL:    nextPage,
+					JSON:   nil,
 				})
 
 				linkHeader, ok = respTwo.Header["Link"]
@@ -1487,10 +1486,10 @@ func TestApi(t *testing.T) {
 				_, err = url.ParseRequestURI(nextPage)
 				assert.Nil(t, err, "Link header should contain a valid URL")
 
-				respThree := apiRequest(t, &apiRequestInput{
-					method: "GET",
-					url:    nextPage,
-					json:   nil,
+				respThree := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+					Method: "GET",
+					URL:    nextPage,
+					JSON:   nil,
 				})
 
 				_, ok = respThree.Header["Link"]
@@ -1512,10 +1511,10 @@ func TestApi(t *testing.T) {
 		t.Run("should return empty for no leases", func(t *testing.T) {
 			defer truncateLeaseTable(t, dbSvc)
 
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases",
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases",
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1583,10 +1582,10 @@ func TestApi(t *testing.T) {
 		assert.Nil(t, err)
 
 		t.Run("When there are no query parameters", func(t *testing.T) {
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases",
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases",
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1603,10 +1602,10 @@ func TestApi(t *testing.T) {
 		})
 
 		t.Run("When there is an account ID parameter", func(t *testing.T) {
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases?accountId=" + accountIDOne,
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases?accountId=" + accountIDOne,
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1614,10 +1613,10 @@ func TestApi(t *testing.T) {
 		})
 
 		t.Run("When there is an principal ID parameter", func(t *testing.T) {
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases?principalId=" + principalIDOne,
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases?principalId=" + principalIDOne,
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1625,10 +1624,10 @@ func TestApi(t *testing.T) {
 		})
 
 		t.Run("When there is a principal ID and an Account ID parameter", func(t *testing.T) {
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases?principalId=" + principalIDOne + "&accountId=" + accountIDOne,
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases?principalId=" + principalIDOne + "&accountId=" + accountIDOne,
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1636,10 +1635,10 @@ func TestApi(t *testing.T) {
 		})
 
 		t.Run("When there is no leases found with principal and account don't exist", func(t *testing.T) {
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases?principalId=reallybadprincipal&accountId=notanaccount",
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases?principalId=reallybadprincipal&accountId=notanaccount",
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1647,10 +1646,10 @@ func TestApi(t *testing.T) {
 		})
 
 		t.Run("When there is a limit parameter", func(t *testing.T) {
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases?limit=1",
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases?limit=1",
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1658,10 +1657,10 @@ func TestApi(t *testing.T) {
 		})
 
 		t.Run("When there is a status parameter", func(t *testing.T) {
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases?status=" + string(db.Inactive),
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases?status=" + string(db.Inactive),
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1671,10 +1670,10 @@ func TestApi(t *testing.T) {
 		t.Run("When there is a Link header", func(t *testing.T) {
 			nextPageRegex := regexp.MustCompile(`<(.+)>`)
 
-			respOne := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/leases?limit=2",
-				json:   nil,
+			respOne := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/leases?limit=2",
+				JSON:   nil,
 			})
 
 			linkHeader, ok := respOne.Header["Link"]
@@ -1688,10 +1687,10 @@ func TestApi(t *testing.T) {
 			_, err := url.ParseRequestURI(nextPage)
 			assert.Nil(t, err, "Link header should contain a valid URL")
 
-			respTwo := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    nextPage,
-				json:   nil,
+			respTwo := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    nextPage,
+				JSON:   nil,
 			})
 
 			linkHeader, ok = respTwo.Header["Link"]
@@ -1705,10 +1704,10 @@ func TestApi(t *testing.T) {
 			_, err = url.ParseRequestURI(nextPage)
 			assert.Nil(t, err, "Link header should contain a valid URL")
 
-			respThree := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    nextPage,
-				json:   nil,
+			respThree := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    nextPage,
+				JSON:   nil,
 			})
 
 			_, ok = respThree.Header["Link"]
@@ -1740,17 +1739,17 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			resp := apiRequest(t, &apiRequestInput{
-				method: "POST",
-				url:    apiURL + "/leases",
-				json:   body,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "POST",
+				URL:    apiURL + "/leases",
+				JSON:   body,
 			})
 
 			// Verify response code
 			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 			// Parse response json
-			data := parseResponseJSON(t, resp)
+			data := testutil.ParseResponseJSON(t, resp)
 
 			// Verify error response json
 			// Get nested json in response json
@@ -1774,17 +1773,17 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			resp := apiRequest(t, &apiRequestInput{
-				method: "POST",
-				url:    apiURL + "/leases",
-				json:   body,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "POST",
+				URL:    apiURL + "/leases",
+				JSON:   body,
 			})
 
 			// Verify response code
 			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 			// Parse response json
-			data := parseResponseJSON(t, resp)
+			data := testutil.ParseResponseJSON(t, resp)
 
 			// Verify error response json
 			// Get nested json in response json
@@ -1809,17 +1808,17 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			resp := apiRequest(t, &apiRequestInput{
-				method: "POST",
-				url:    apiURL + "/leases",
-				json:   body,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "POST",
+				URL:    apiURL + "/leases",
+				JSON:   body,
 			})
 
 			// Verify response code
 			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 			// Parse response json
-			data := parseResponseJSON(t, resp)
+			data := testutil.ParseResponseJSON(t, resp)
 
 			// Verify error response json
 			// Get nested json in response json
@@ -1847,17 +1846,17 @@ func TestApi(t *testing.T) {
 			}
 
 			// Send an API request
-			resp := apiRequest(t, &apiRequestInput{
-				method: "POST",
-				url:    apiURL + "/leases",
-				json:   body,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "POST",
+				URL:    apiURL + "/leases",
+				JSON:   body,
 			})
 
 			// Verify response code
 			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 			// Parse response json
-			data := parseResponseJSON(t, resp)
+			data := testutil.ParseResponseJSON(t, resp)
 
 			// Verify error response json
 			// Get nested json in response json
@@ -1879,10 +1878,10 @@ func TestApi(t *testing.T) {
 		t.Run("should return empty for no accounts", func(t *testing.T) {
 			defer truncateAccountTable(t, dbSvc)
 
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/accounts",
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/accounts",
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1929,10 +1928,10 @@ func TestApi(t *testing.T) {
 		assert.Nil(t, err)
 
 		t.Run("When there are no query parameters", func(t *testing.T) {
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/accounts",
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/accounts",
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1947,10 +1946,10 @@ func TestApi(t *testing.T) {
 		})
 
 		t.Run("When there is an account ID parameter", func(t *testing.T) {
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/accounts?id=" + accountIDOne,
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/accounts?id=" + accountIDOne,
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1958,10 +1957,10 @@ func TestApi(t *testing.T) {
 		})
 
 		t.Run("When there is a limit parameter", func(t *testing.T) {
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/accounts?limit=1",
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/accounts?limit=1",
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1969,10 +1968,10 @@ func TestApi(t *testing.T) {
 		})
 
 		t.Run("When there is a status parameter", func(t *testing.T) {
-			resp := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/accounts?status=" + string(db.NotReady),
-				json:   nil,
+			resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/accounts?status=" + string(db.NotReady),
+				JSON:   nil,
 			})
 
 			results := parseResponseArrayJSON(t, resp)
@@ -1982,10 +1981,10 @@ func TestApi(t *testing.T) {
 		t.Run("When there is a Link header", func(t *testing.T) {
 			nextPageRegex := regexp.MustCompile(`<(.+)>`)
 
-			respOne := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    apiURL + "/accounts?limit=2",
-				json:   nil,
+			respOne := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    apiURL + "/accounts?limit=2",
+				JSON:   nil,
 			})
 
 			linkHeader, ok := respOne.Header["Link"]
@@ -1999,10 +1998,10 @@ func TestApi(t *testing.T) {
 			_, err := url.ParseRequestURI(nextPage)
 			assert.Nil(t, err, "Link header should contain a valid URL")
 
-			respTwo := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    nextPage,
-				json:   nil,
+			respTwo := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    nextPage,
+				JSON:   nil,
 			})
 
 			linkHeader, ok = respTwo.Header["Link"]
@@ -2016,10 +2015,10 @@ func TestApi(t *testing.T) {
 			_, err = url.ParseRequestURI(nextPage)
 			assert.Nil(t, err, "Link header should contain a valid URL")
 
-			respThree := apiRequest(t, &apiRequestInput{
-				method: "GET",
-				url:    nextPage,
-				json:   nil,
+			respThree := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+				Method: "GET",
+				URL:    nextPage,
+				JSON:   nil,
 			})
 
 			_, ok = respThree.Header["Link"]
@@ -2053,127 +2052,21 @@ type createAccountRequest struct {
 	AdminRoleArn string `json:"adminRoleArn"`
 }
 
-type apiRequestInput struct {
-	method      string
-	url         string
-	creds       *credentials.Credentials
-	region      string
-	json        interface{}
-	maxAttempts int
-	// Callback function to assert API responses.
-	// apiRequest() will continue to retry until this
-	// function passes assertions.
-	//
-	// eg.
-	//		f: func(r *testutil.R, apiResp *apiResponse) {
-	//			assert.Equal(r, 200, apiResp.StatusCode)
-	//		},
-	// or:
-	//		f: statusCodeAssertion(200)
-	//
-	// By default, this will check that the API returns a 2XX response
-	f func(r *testutil.R, apiResp *apiResponse)
-}
-
-func statusCodeAssertion(statusCode int) func(r *testutil.R, apiResp *apiResponse) {
-	return func(r *testutil.R, apiResp *apiResponse) {
+func statusCodeAssertion(statusCode int) func(r *testutil.R, apiResp *testutil.ApiResponse) {
+	return func(r *testutil.R, apiResp *testutil.ApiResponse) {
 		// Defaults to returning 200
 		assert.Equal(r, statusCode, apiResp.StatusCode)
 	}
 }
 
-type apiResponse struct {
-	http.Response
-	json interface{}
-}
-
-var chainCredentials = credentials.NewChainCredentials([]credentials.Provider{
-	&credentials.EnvProvider{},
-	&credentials.SharedCredentialsProvider{Filename: "", Profile: ""},
-})
-
-func apiRequest(t *testing.T, input *apiRequestInput) *apiResponse {
-	// Set defaults
-	if input.creds == nil {
-		input.creds = chainCredentials
-	}
-	if input.region == "" {
-		input.region = "us-east-1"
-	}
-	if input.maxAttempts == 0 {
-		input.maxAttempts = 30
-	}
-
-	// Create API request
-	req, err := http.NewRequest(input.method, input.url, nil)
-	assert.Nil(t, err)
-
-	// Sign our API request, using sigv4
-	// See https://docs.aws.amazon.com/general/latest/gr/sigv4_signing.html
-	signer := sigv4.NewSigner(input.creds)
-	now := time.Now().Add(time.Duration(30) * time.Second)
-	var signedHeaders http.Header
-	var apiResp *apiResponse
-	testutil.Retry(t, input.maxAttempts, 2*time.Second, func(r *testutil.R) {
-		// If there's a json provided, add it when signing
-		// Body does not matter if added before the signing, it will be overwritten
-		if input.json != nil {
-			payload, err := json.Marshal(input.json)
-			assert.Nil(t, err)
-			req.Header.Set("Content-Type", "application/json")
-			signedHeaders, err = signer.Sign(req, bytes.NewReader(payload),
-				"execute-api", input.region, now)
-			require.Nil(t, err)
-		} else {
-			signedHeaders, err = signer.Sign(req, nil, "execute-api",
-				input.region, now)
-		}
-		assert.NoError(r, err)
-		assert.NotNil(r, signedHeaders)
-
-		// Send the API requests
-		// resp, err := http.DefaultClient.Do(req)
-		httpClient := http.Client{
-			Timeout: 60 * time.Second,
-		}
-		resp, err := httpClient.Do(req)
-		assert.NoError(r, err)
-
-		// Parse the JSON response
-		apiResp = &apiResponse{
-			Response: *resp,
-		}
-		defer resp.Body.Close()
-		var data interface{}
-
-		body, err := ioutil.ReadAll(resp.Body)
-		assert.NoError(r, err)
-
-		err = json.Unmarshal([]byte(body), &data)
-		if err == nil {
-			apiResp.json = data
-		}
-
-		if input.f != nil {
-			input.f(r, apiResp)
-		}
-	})
-	return apiResp
-}
-
-func parseResponseJSON(t *testing.T, resp *apiResponse) map[string]interface{} {
-	require.NotNil(t, resp.json)
-	return resp.json.(map[string]interface{})
-}
-
-func parseResponseArrayJSON(t *testing.T, resp *apiResponse) []map[string]interface{} {
-	require.NotNil(t, resp.json)
+func parseResponseArrayJSON(t *testing.T, resp *testutil.ApiResponse) []map[string]interface{} {
+	require.NotNil(t, resp.JSON)
 
 	// Go doesn't allow you to cast directly to []map[string]interface{}
 	// so we need to mess around here a bit.
 	// This might be relevant: https://stackoverflow.com/questions/38579485/golang-convert-slices-into-map
-	require.IsTypef(t, []interface{}{}, resp.json, "Expected JSON array response, got %v", resp.json)
-	respJSON := resp.json.([]interface{})
+	require.IsTypef(t, []interface{}{}, resp.JSON, "Expected JSON array response, got %v", resp.JSON)
+	respJSON := resp.JSON.([]interface{})
 
 	arrJSON := []map[string]interface{}{}
 	for _, obj := range respJSON {
@@ -2196,57 +2089,6 @@ func createPolicy(t *testing.T, awsSession client.ConfigProvider, name string, b
 	}
 	require.Nil(t, err)
 	return policy.Policy
-}
-
-type createAdminRoleOutput struct {
-	accountID    string
-	roleName     string
-	adminRoleArn string
-}
-
-func createAdminRole(t *testing.T, awsSession client.ConfigProvider, adminRoleName string, policies []string) *createAdminRoleOutput {
-	currentAccountID := aws2.GetAccountId(t)
-
-	// Create an Admin Role that can be assumed
-	// within this account
-	iamSvc := iam.New(awsSession)
-	assumeRolePolicy := fmt.Sprintf(`{
-			"Version": "2012-10-17",
-			"Statement": [
-				{
-					"Effect": "Allow",
-					"Principal": {
-					"AWS": "arn:aws:iam::%s:root"
-					},
-					"Action": "sts:AssumeRole",
-					"Condition": {}
-				}
-			]
-		}`, currentAccountID)
-	roleRes, err := iamSvc.CreateRole(&iam.CreateRoleInput{
-		AssumeRolePolicyDocument: aws.String(assumeRolePolicy),
-		Path:                     aws.String("/"),
-		RoleName:                 aws.String(adminRoleName),
-	})
-	require.Nil(t, err)
-
-	adminRoleArn := *roleRes.Role.Arn
-
-	for _, p := range policies {
-		_, err = iamSvc.AttachRolePolicy(&iam.AttachRolePolicyInput{
-			RoleName:  aws.String(adminRoleName),
-			PolicyArn: aws.String(p),
-		})
-		require.Nil(t, err)
-	}
-	// IAM Role takes a while to propagate....
-	//time.Sleep(10 * time.Second)
-
-	return &createAdminRoleOutput{
-		adminRoleArn: adminRoleArn,
-		roleName:     adminRoleName,
-		accountID:    currentAccountID,
-	}
 }
 
 func createUsage(t *testing.T, apiURL string, usageSvc usage.Service) {
@@ -2290,10 +2132,10 @@ func createUsage(t *testing.T, apiURL string, usageSvc usage.Service) {
 
 	testutil.Retry(t, 10, 10*time.Millisecond, func(r *testutil.R) {
 
-		resp := apiRequest(t, &apiRequestInput{
-			method: "GET",
-			url:    apiURL + queryString,
-			json:   nil,
+		resp := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
+			Method: "GET",
+			URL:    apiURL + queryString,
+			JSON:   nil,
 		})
 
 		// Verify response code
