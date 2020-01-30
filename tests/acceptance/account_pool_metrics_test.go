@@ -1,9 +1,11 @@
 package tests
 
 import (
-	"fmt"
+	"github.com/Optum/dce/pkg/db"
 	"github.com/Optum/dce/tests/acceptance/testutil"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,6 +18,28 @@ func TestAccountPoolMetrics(t *testing.T) {
 	}
 	tfOut := terraform.OutputAll(t, tfOpts)
 	apiURL := tfOut["api_url"].(string)
+
+	awsSession, err := session.NewSession()
+	require.Nil(t, err)
+	role := testutil.CreateAdminAPIInvokeRole(t, awsSession)
+
+
+	dbSvc := db.New(
+		dynamodb.New(
+			awsSession,
+			aws.NewConfig().WithRegion(tfOut["aws_region"].(string)),
+		),
+		tfOut["accounts_table_name"].(string),
+		tfOut["leases_table_name"].(string),
+		7,
+	)
+	// Cleanup tables before and after tests
+	truncateAccountTable(t, dbSvc)
+	truncateLeaseTable(t, dbSvc)
+	defer truncateAccountTable(t, dbSvc)
+	defer truncateLeaseTable(t, dbSvc)
+	defer deleteAdminRole(t, role.RoleName, role.Policies)
+
 	// TotalAccounts = NotReady + Ready + Leased + Orphaned
 	// When account created then TotalAccounts should increment by one
 	// When account deleted then TotalAccounts should decrement by one
@@ -26,14 +50,13 @@ func TestAccountPoolMetrics(t *testing.T) {
 
 	// TotalAccounts = NotReady + Ready + Leased + Orphaned
 	t.Run("When account created then TotalAccounts should increment by one", func(t *testing.T) {
-		awsSession, err := session.NewSession()
-		require.Nil(t, err)
+		// Create role
 
+		// Check TotalAccounts from dynamo
+		//dbSvc.
 
-		// Check TotalAccounts
 
 		// Create account
-		role := testutil.CreateAdminAPIInvokeRole(t, awsSession)
 		createAccountRes := testutil.InvokeApiWithRetry(t, &testutil.InvokeApiWithRetryInput{
 			Method: "POST",
 			URL:    apiURL + "/accounts",
@@ -47,9 +70,13 @@ func TestAccountPoolMetrics(t *testing.T) {
 			},
 		})
 
+		// Check TotalAccounts from dynamo
+
+		// Assert incremented by 1
+
+
 		// Check the response
 		postResJSON := testutil.ParseResponseJSON(t, createAccountRes)
-		fmt.Println("@@@@@", postResJSON)
 		require.Equal(t, role.AccountID, postResJSON["id"])
 		require.Equal(t, "NotReady", postResJSON["accountStatus"])
 		require.Equal(t, role.AdminRoleArn, postResJSON["adminRoleArn"])

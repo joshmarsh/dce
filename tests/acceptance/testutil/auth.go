@@ -13,10 +13,11 @@ import (
 	"testing"
 )
 
-type CreateRoleOutput struct {
+type AssumableRole struct {
 	AccountID    string
 	RoleName     string
 	AdminRoleArn string
+	Policies 	[]string
 }
 
 var chainCredentials = credentials.NewChainCredentials([]credentials.Provider{
@@ -26,7 +27,7 @@ var chainCredentials = credentials.NewChainCredentials([]credentials.Provider{
 
 // CreateAssumableRole creates an assumable role in the account referred to by awsSession. Policies may be attached
 // via the policies parameter.
-func CreateAssumableRole(t *testing.T, awsSession client.ConfigProvider, adminRoleName string, policies []string) *CreateRoleOutput {
+func CreateAssumableRole(t *testing.T, awsSession client.ConfigProvider, adminRoleName string, policies []string) *AssumableRole {
 	currentAccountID := aws2.GetAccountId(t)
 
 	// Create an Admin Role that can be assumed
@@ -64,16 +65,18 @@ func CreateAssumableRole(t *testing.T, awsSession client.ConfigProvider, adminRo
 	// IAM Role takes a while to propagate....
 	//time.Sleep(10 * time.Second)
 
-	return &CreateRoleOutput{
+	return &AssumableRole{
 		AdminRoleArn: adminRoleArn,
 		RoleName:     adminRoleName,
 		AccountID:    currentAccountID,
+		Policies: policies,
 	}
 }
 
-func CreateAdminAPIInvokeRole(t *testing.T, awsSession client.ConfigProvider) *CreateRoleOutput {
+func CreateAdminAPIInvokeRole(t *testing.T, awsSession client.ConfigProvider) *AssumableRole {
 	adminRoleName := "dce-api-test-admin-role-" + fmt.Sprintf("%v", time.Now().Unix())
 	policies := []string{
+		"arn:aws:iam::aws:policy/IAMFullAccess",
 		"arn:aws:iam::aws:policy/AmazonAPIGatewayInvokeFullAccess",
 	}
 	return CreateAssumableRole(t, awsSession, adminRoleName, policies)
