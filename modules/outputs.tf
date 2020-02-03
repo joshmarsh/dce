@@ -23,11 +23,11 @@ output "usage_table_arn" {
 }
 
 output "metrics_table_name" {
-  value = aws_dynamodb_table.metrics.name
+  value = aws_dynamodb_table.account_pool_metrics.name
 }
 
 output "metrics_table_arn" {
-  value = aws_dynamodb_table.metrics.arn
+  value = aws_dynamodb_table.account_pool_metrics.arn
 }
 
 output "sqs_account_pool_metrics_queue_url" {

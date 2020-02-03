@@ -1,8 +1,8 @@
 /*
 Keep a table of basic account pool metrics up to date using events from the accounts queue
 */
-resource "aws_dynamodb_table" "metrics" {
-  name             = "Metrics${local.table_suffix}"
+resource "aws_dynamodb_table" "account_pool_metrics" {
+  name             = "AccountPoolMetrics${local.table_suffix}"
   read_capacity    = 5
   write_capacity   = 5
   hash_key         = "Id"
@@ -27,7 +27,7 @@ resource "aws_sqs_queue" "account_pool_metrics" {
   tags = var.global_tags
 }
 
-resource "aws_sns_topic_subscription" "user_updates_sqs_target" {
+resource "aws_sns_topic_subscription" "account_pool_metrics_subscription" {
   topic_arn = aws_sns_topic.accounts.arn
   protocol  = "sqs"
   endpoint  = aws_sqs_queue.account_pool_metrics.arn
@@ -44,7 +44,7 @@ module "update_account_pool_metrics_lambda" {
 
   environment = {
     AWS_CURRENT_REGION       = var.aws_region
-    ACCOUNT_DB               = aws_dynamodb_table.metrics.id
+    ACCOUNT_DB               = aws_dynamodb_table.account_pool_metrics.id
   }
 }
 
