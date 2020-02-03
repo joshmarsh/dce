@@ -1,11 +1,8 @@
 package tests
 
 import (
-	"github.com/Optum/dce/pkg/db"
 	"github.com/Optum/dce/tests/acceptance/testutil"
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,20 +21,22 @@ func TestAccountPoolMetrics(t *testing.T) {
 	role := testutil.CreateAdminAPIInvokeRole(t, awsSession)
 
 
-	dbSvc := db.New(
-		dynamodb.New(
-			awsSession,
-			aws.NewConfig().WithRegion(tfOut["aws_region"].(string)),
-		),
-		tfOut["accounts_table_name"].(string),
-		tfOut["leases_table_name"].(string),
-		7,
-	)
+	//dbSvc := db.New(
+	//	dynamodb.New(
+	//		awsSession,
+	//		aws.NewConfig().WithRegion(tfOut["aws_region"].(string)),
+	//	),
+	//	tfOut["accounts_table_name"].(string),
+	//	tfOut["leases_table_name"].(string),
+	//	7,
+	//)
 	// Cleanup tables before and after tests
-	truncateAccountTable(t, dbSvc)
-	truncateLeaseTable(t, dbSvc)
-	defer truncateAccountTable(t, dbSvc)
-	defer truncateLeaseTable(t, dbSvc)
+	//truncateAccountTable(t, dbSvc)
+	//truncateLeaseTable(t, dbSvc)
+	//defer truncateAccountTable(t, dbSvc)
+	//defer truncateLeaseTable(t, dbSvc)
+
+
 	defer deleteAdminRole(t, role.RoleName, role.Policies)
 
 	// TotalAccounts = NotReady + Ready + Leased + Orphaned
@@ -53,7 +52,7 @@ func TestAccountPoolMetrics(t *testing.T) {
 		// Create role
 
 		// Check TotalAccounts from dynamo
-		//dbSvc.
+
 
 
 		// Create account
