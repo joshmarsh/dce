@@ -1,11 +1,20 @@
 package accountpoolmetrics
 
-import "time"
+import (
+	"time"
+)
 
 // Writer put an item into the data store
 type Writer interface {
 	Write(i *AccountPoolMetrics, lastModifiedOn *int64) error
 }
+
+// AtomicWriter performs atomic updates on items in the data store
+type AtomicWriter interface {
+	Increment(name MetricName) error
+	Decrement(name MetricName) error
+}
+
 
 // MultipleReader reads multiple accounts from the data store
 type SingletonReader interface {
@@ -21,6 +30,7 @@ type Reader interface {
 type ReaderWriter interface {
 	Reader
 	Writer
+	AtomicWriter
 }
 
 type Service struct{
@@ -59,12 +69,20 @@ func (s *Service) Save(data *AccountPoolMetrics) error {
 	return nil
 }
 
-func (s *Service) Increment(name MetricName) (*AccountPoolMetrics, error) {
-	panic("implement me")
+func (s *Service) Increment(name MetricName) error {
+	err := s.dataSvc.Increment(name)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (s *Service) Decrement(name MetricName) (*AccountPoolMetrics, error) {
-	panic("implement me")
+func (s *Service) Decrement(name MetricName) error {
+	err := s.dataSvc.Decrement(name)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // NewServiceInput Input for creating a new Service

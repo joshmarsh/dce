@@ -54,12 +54,12 @@ func TestGet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mocksRwd := &mocks.ReaderWriter{}
+			mocksRw := &mocks.ReaderWriter{}
 
-			mocksRwd.On("GetSingleton").Return(tt.ret.data, tt.ret.err)
+			mocksRw.On("GetSingleton").Return(tt.ret.data, tt.ret.err)
 
 			apmSvc := accountpoolmetrics.NewService(accountpoolmetrics.NewServiceInput{
-				DataSvc: mocksRwd,
+				DataSvc: mocksRw,
 			})
 
 			getAccountPoolMetrics, err := apmSvc.Get()
@@ -71,11 +71,168 @@ func TestGet(t *testing.T) {
 }
 
 func TestIncrement(t *testing.T) {
-	t.Fail()
+
+	type response struct {
+		err  error
+	}
+
+	tests := []struct {
+		name string
+		metricName accountpoolmetrics.MetricName
+		ret  response
+		exp  response
+	}{
+		{
+			name: "should increment Ready metric",
+			metricName: accountpoolmetrics.Ready,
+			ret: response{
+				err: nil,
+			},
+			exp: response{
+				err: nil,
+			},
+		},
+		{
+			name: "should increment NotReady metric",
+			metricName: accountpoolmetrics.NotReady,
+			ret: response{
+				err: nil,
+			},
+			exp: response{
+				err: nil,
+			},
+		},
+		{
+			name: "should increment Leased metric",
+			metricName: accountpoolmetrics.Leased,
+			ret: response{
+				err: nil,
+			},
+			exp: response{
+				err: nil,
+			},
+		},
+		{
+			name: "should increment Orphaned metric",
+			metricName: accountpoolmetrics.Orphaned,
+			ret: response{
+				err: nil,
+			},
+			exp: response{
+				err: nil,
+			},
+		},
+		{
+			name: "should throw error",
+			metricName: accountpoolmetrics.Orphaned,
+			ret: response{
+				err: errors.NewInternalServer("failure", nil),
+			},
+			exp: response{
+				err: errors.NewInternalServer("failure", nil),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mocksRw := &mocks.ReaderWriter{}
+
+			mocksRw.On("Increment", mock.MatchedBy(func(metricName accountpoolmetrics.MetricName) bool {
+				return metricName == tt.metricName
+			})).Return(tt.ret.err)
+
+			apmSvc := accountpoolmetrics.NewService(accountpoolmetrics.NewServiceInput{
+				DataSvc: mocksRw,
+			})
+
+			err := apmSvc.Increment(tt.metricName)
+			assert.True(t, errors.Is(err, tt.exp.err), "actual error %q doesn't match expected error %q", err, tt.exp.err)
+		})
+	}
 }
 
+
 func TestDecrement(t *testing.T) {
-	t.Fail()
+
+	type response struct {
+		err  error
+	}
+
+	tests := []struct {
+		name string
+		metricName accountpoolmetrics.MetricName
+		ret  response
+		exp  response
+	}{
+		{
+			name: "should increment Ready metric",
+			metricName: accountpoolmetrics.Ready,
+			ret: response{
+				err: nil,
+			},
+			exp: response{
+				err: nil,
+			},
+		},
+		{
+			name: "should increment NotReady metric",
+			metricName: accountpoolmetrics.NotReady,
+			ret: response{
+				err: nil,
+			},
+			exp: response{
+				err: nil,
+			},
+		},
+		{
+			name: "should increment Leased metric",
+			metricName: accountpoolmetrics.Leased,
+			ret: response{
+				err: nil,
+			},
+			exp: response{
+				err: nil,
+			},
+		},
+		{
+			name: "should increment Orphaned metric",
+			metricName: accountpoolmetrics.Orphaned,
+			ret: response{
+				err: nil,
+			},
+			exp: response{
+				err: nil,
+			},
+		},
+		{
+			name: "should throw error",
+			metricName: accountpoolmetrics.Orphaned,
+			ret: response{
+				err: errors.NewInternalServer("failure", nil),
+			},
+			exp: response{
+				err: errors.NewInternalServer("failure", nil),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mocksRw := &mocks.ReaderWriter{}
+
+			mocksRw.On("Decrement", mock.MatchedBy(func(metricName accountpoolmetrics.MetricName) bool {
+				return metricName == tt.metricName
+			})).Return(tt.ret.err)
+
+			apmSvc := accountpoolmetrics.NewService(accountpoolmetrics.NewServiceInput{
+				DataSvc: mocksRw,
+			})
+
+			err := apmSvc.Decrement(tt.metricName)
+			assert.True(t, errors.Is(err, tt.exp.err), "actual error %q doesn't match expected error %q", err, tt.exp.err)
+		})
+	}
 }
 
 func TestSave(t *testing.T) {
@@ -89,12 +246,12 @@ func TestSave(t *testing.T) {
 	tests := []struct {
 		name      string
 		returnErr error
-		metrics   *accountpoolmetrics.AccountPoolMetrics
+		input     *accountpoolmetrics.AccountPoolMetrics
 		exp       response
 	}{
 		{
 			name:    "should save record with timestamps",
-			metrics: &accountpoolmetrics.AccountPoolMetrics{
+			input: &accountpoolmetrics.AccountPoolMetrics{
 				ID:     ptrString("123456789012"),
 				LastModifiedOn: &now,
 				CreatedOn: &now,
@@ -119,7 +276,7 @@ func TestSave(t *testing.T) {
 		},
 		{
 			name: "new record should save with new created on",
-			metrics: &accountpoolmetrics.AccountPoolMetrics{
+			input: &accountpoolmetrics.AccountPoolMetrics{
 				ID:     ptrString("123456789012"),
 				Ready: intToPtr(0),
 				NotReady: intToPtr(1),
@@ -142,7 +299,7 @@ func TestSave(t *testing.T) {
 		},
 		{
 			name: "should fail on return err",
-			metrics: &accountpoolmetrics.AccountPoolMetrics{
+			input: &accountpoolmetrics.AccountPoolMetrics{
 				ID:     ptrString("123456789012"),
 				Ready: intToPtr(0),
 				NotReady: intToPtr(1),
@@ -167,18 +324,18 @@ func TestSave(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mocksRwd := &mocks.ReaderWriter{}
+			mocksRw := &mocks.ReaderWriter{}
 
-			mocksRwd.On("Write", mock.AnythingOfType("*accountpoolmetrics.AccountPoolMetrics"), mock.AnythingOfType("*int64")).Return(tt.returnErr)
+			mocksRw.On("Write", mock.AnythingOfType("*accountpoolmetrics.AccountPoolMetrics"), mock.AnythingOfType("*int64")).Return(tt.returnErr)
 
 			apmSvc := accountpoolmetrics.NewService(accountpoolmetrics.NewServiceInput{
-				DataSvc: mocksRwd,
+				DataSvc: mocksRw,
 			})
 
-			err := apmSvc.Save(tt.metrics)
+			err := apmSvc.Save(tt.input)
 
 			assert.Truef(t, errors.Is(err, tt.exp.err), "actual error %q doesn't match expected error %q", err, tt.exp.err)
-			assert.Equal(t, tt.exp.data, tt.metrics)
+			assert.Equal(t, tt.exp.data, tt.input)
 
 		})
 	}

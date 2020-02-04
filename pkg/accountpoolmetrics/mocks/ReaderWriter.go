@@ -10,6 +10,20 @@ type ReaderWriter struct {
 	mock.Mock
 }
 
+// Decrement provides a mock function with given fields: name
+func (_m *ReaderWriter) Decrement(name accountpoolmetrics.MetricName) error {
+	ret := _m.Called(name)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(accountpoolmetrics.MetricName) error); ok {
+		r0 = rf(name)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // GetSingleton provides a mock function with given fields:
 func (_m *ReaderWriter) GetSingleton() (*accountpoolmetrics.AccountPoolMetrics, error) {
 	ret := _m.Called()
@@ -31,6 +45,20 @@ func (_m *ReaderWriter) GetSingleton() (*accountpoolmetrics.AccountPoolMetrics, 
 	}
 
 	return r0, r1
+}
+
+// Increment provides a mock function with given fields: name
+func (_m *ReaderWriter) Increment(name accountpoolmetrics.MetricName) error {
+	ret := _m.Called(name)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(accountpoolmetrics.MetricName) error); ok {
+		r0 = rf(name)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // Write provides a mock function with given fields: i, lastModifiedOn
