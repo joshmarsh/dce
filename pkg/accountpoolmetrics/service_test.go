@@ -31,21 +31,21 @@ func TestGet(t *testing.T) {
 			name: "should get AccountPoolMetrics record",
 			ret: response{
 				data: &accountpoolmetrics.AccountPoolMetrics{
-					ID:     ptrString("123456789012"),
-					Ready: intToPtr(0),
-					NotReady: intToPtr(1),
-					Leased: intToPtr(2),
-					Orphaned: intToPtr(3),
+					ID:       ptrString("123456789012"),
+					Ready:    ptrInt16(0),
+					NotReady: ptrInt16(1),
+					Leased:   ptrInt16(2),
+					Orphaned: ptrInt16(3),
 				},
 				err: nil,
 			},
 			exp: response{
 				data: &accountpoolmetrics.AccountPoolMetrics{
-					ID:     ptrString("123456789012"),
-					Ready: intToPtr(0),
-					NotReady: intToPtr(1),
-					Leased: intToPtr(2),
-					Orphaned: intToPtr(3),
+					ID:       ptrString("123456789012"),
+					Ready:    ptrInt16(0),
+					NotReady: ptrInt16(1),
+					Leased:   ptrInt16(2),
+					Orphaned: ptrInt16(3),
 				},
 				err: nil,
 			},
@@ -252,23 +252,23 @@ func TestSave(t *testing.T) {
 		{
 			name:    "should save record with timestamps",
 			input: &accountpoolmetrics.AccountPoolMetrics{
-				ID:     ptrString("123456789012"),
+				ID:             ptrString("123456789012"),
 				LastModifiedOn: &now,
-				CreatedOn: &now,
-				Ready: intToPtr(0),
-				NotReady: intToPtr(1),
-				Leased: intToPtr(2),
-				Orphaned: intToPtr(3),
+				CreatedOn:      &now,
+				Ready:          ptrInt16(0),
+				NotReady:       ptrInt16(1),
+				Leased:         ptrInt16(2),
+				Orphaned:       ptrInt16(3),
 			},
 			exp: response{
 				data: &accountpoolmetrics.AccountPoolMetrics{
-					ID:     ptrString("123456789012"),
+					ID:             ptrString("123456789012"),
 					LastModifiedOn: &now,
-					CreatedOn: &now,
-					Ready: intToPtr(0),
-					NotReady: intToPtr(1),
-					Leased: intToPtr(2),
-					Orphaned: intToPtr(3),
+					CreatedOn:      &now,
+					Ready:          ptrInt16(0),
+					NotReady:       ptrInt16(1),
+					Leased:         ptrInt16(2),
+					Orphaned:       ptrInt16(3),
 				},
 				err: nil,
 			},
@@ -277,21 +277,21 @@ func TestSave(t *testing.T) {
 		{
 			name: "new record should save with new created on",
 			input: &accountpoolmetrics.AccountPoolMetrics{
-				ID:     ptrString("123456789012"),
-				Ready: intToPtr(0),
-				NotReady: intToPtr(1),
-				Leased: intToPtr(2),
-				Orphaned: intToPtr(3),
+				ID:       ptrString("123456789012"),
+				Ready:    ptrInt16(0),
+				NotReady: ptrInt16(1),
+				Leased:   ptrInt16(2),
+				Orphaned: ptrInt16(3),
 			},
 			exp: response{
 				data: &accountpoolmetrics.AccountPoolMetrics{
-					ID:     ptrString("123456789012"),
-					Ready: intToPtr(0),
-					NotReady: intToPtr(1),
-					Leased: intToPtr(2),
-					Orphaned: intToPtr(3),
+					ID:             ptrString("123456789012"),
+					Ready:          ptrInt16(0),
+					NotReady:       ptrInt16(1),
+					Leased:         ptrInt16(2),
+					Orphaned:       ptrInt16(3),
 					LastModifiedOn: &now,
-					CreatedOn: &now,
+					CreatedOn:      &now,
 				},
 				err: nil,
 			},
@@ -300,21 +300,21 @@ func TestSave(t *testing.T) {
 		{
 			name: "should fail on return err",
 			input: &accountpoolmetrics.AccountPoolMetrics{
-				ID:     ptrString("123456789012"),
-				Ready: intToPtr(0),
-				NotReady: intToPtr(1),
-				Leased: intToPtr(2),
-				Orphaned: intToPtr(3),
+				ID:       ptrString("123456789012"),
+				Ready:    ptrInt16(0),
+				NotReady: ptrInt16(1),
+				Leased:   ptrInt16(2),
+				Orphaned: ptrInt16(3),
 			},
 			exp: response{
 				data: &accountpoolmetrics.AccountPoolMetrics{
-					ID:     ptrString("123456789012"),
-					Ready: intToPtr(0),
-					NotReady: intToPtr(1),
-					Leased: intToPtr(2),
-					Orphaned: intToPtr(3),
+					ID:             ptrString("123456789012"),
+					Ready:          ptrInt16(0),
+					NotReady:       ptrInt16(1),
+					Leased:         ptrInt16(2),
+					Orphaned:       ptrInt16(3),
 					LastModifiedOn: &now,
-					CreatedOn: &now,
+					CreatedOn:      &now,
 				},
 				err: errors.NewInternalServer("failure", nil),
 			},
@@ -341,6 +341,6 @@ func TestSave(t *testing.T) {
 	}
 }
 
-func intToPtr(i int16) *int16 {
+func ptrInt16(i int16) *int16 {
 	return &i
 }

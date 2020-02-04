@@ -14,6 +14,10 @@ func ptrString(s string) *string {
 	return &ptrS
 }
 
+func ptrInt16(i int16) *int16 {
+	return &i
+}
+
 func ptrInt64(i int64) *int64 {
 	ptrI := i
 	return &ptrI
